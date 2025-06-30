@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -14,12 +15,14 @@ if not api_key:
     st.warning("Please enter your API key to continue.")
     st.stop()
 
+# --- Set environment variable for API key ---
+os.environ["GOOGLE_API_KEY"] = api_key
+
 # --- Configure Client ---
 try:
-    genai.configure(api_key=api_key)
     client = genai.Client()
 except Exception as e:
-    st.error(f"❌ Failed to authenticate with API key: {e}")
+    st.error(f"❌ Failed to create client: {e}")
     st.stop()
 
 # --- User Prompt ---
