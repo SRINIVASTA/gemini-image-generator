@@ -1,46 +1,53 @@
-import os
 import streamlit as st
 from google import genai
 from google.genai import types
 from PIL import Image
 from io import BytesIO
 
+# Set wide layout for responsiveness
+st.set_page_config(layout="wide")
+
 # --- UI Title ---
 st.title("🎨 Google Gemini AI Image Generator")
 
 # --- API Key Input ---
 api_key = st.text_input("🔐 Enter your Google API Key", type="password")
-
 if not api_key:
     st.warning("Please enter your API key to continue.")
     st.stop()
 
-# --- Set environment variable for API key ---
-os.environ["GOOGLE_API_KEY"] = api_key
-
 # --- Configure Client ---
 try:
-    client = genai.Client()
+    # The new genai package expects setting the env variable or alternative auth
+    # If your genai version supports configure, uncomment the next line:
+    # genai.configure(api_key=api_key)
+    client = genai.Client(api_key=api_key)  # Pass API key directly to Client if supported
 except Exception as e:
-    st.error(f"❌ Failed to create client: {e}")
+    st.error(f"❌ Failed to authenticate with API key: {e}")
     st.stop()
 
-# --- User Prompt ---
-prompt = st.text_area("📝 Enter your image prompt here", height=150)
+# --- Layout with columns ---
+col1, col2 = st.columns([3, 1])
 
-style = st.selectbox(
-    "🎨 Choose Artistic Style",
-    ["Any", "Photorealistic", "Pixel Art", "Vector Art", "3D Render", "Isometric",
-     "Cartoon", "Fantasy Art", "Cyberpunk", "Steampunk", "Watercolor", "Oil Painting", "Concept Art", "Low Poly",
-     "Line Art", "Ink Drawing", "Pencil Drawing", "Minimalist", "Surrealism", "Abstract", "Neon Glow", "Flat Design"]
-)
+with col1:
+    prompt = st.text_area("📝 Enter your image prompt here", height=150)
 
-aspect = st.selectbox(
-    "🖼 Choose Aspect Ratio Hint",
-    ["Any", "Square (1:1)", "Portrait (9:16)", "Landscape (16:9)"]
-)
+with col2:
+    with st.expander("🎨 Options"):
+        style = st.selectbox(
+            "Choose Artistic Style",
+            ["Any", "Photorealistic", "Pixel Art", "Vector Art", "3D Render", "Isometric",
+             "Cartoon", "Fantasy Art", "Cyberpunk", "Steampunk", "Watercolor", "Oil Painting",
+             "Concept Art", "Low Poly", "Line Art", "Ink Drawing", "Pencil Drawing",
+             "Minimalist", "Surrealism", "Abstract", "Neon Glow", "Flat Design"]
+        )
 
-img_format = st.selectbox("📁 Choose Output Format", ["PNG", "JPEG"])
+        aspect = st.selectbox(
+            "Choose Aspect Ratio Hint",
+            ["Any", "Square (1:1)", "Portrait (9:16)", "Landscape (16:9)"]
+        )
+
+        img_format = st.selectbox("Choose Output Format", ["PNG", "JPEG"])
 
 # --- Construct Final Prompt ---
 style_hint = f"in {style} style" if style != "Any" else ""
