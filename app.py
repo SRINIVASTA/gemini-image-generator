@@ -10,6 +10,22 @@ st.set_page_config(layout="wide")
 # --- UI Title ---
 st.title("🎨 Google Gemini AI Image Generator")
 
+# --- App Instructions ---
+st.markdown("""
+---
+
+🧠 **Before You Use the App**  
+To generate images with Google Gemini AI, you'll need to provide your own API key. This keeps your usage secure and personalized.
+
+🔐 **Required API Key:**  
+`GOOGLE_API_KEY` → used to access Google Gemini AI
+
+👉 [Get your API key here](https://lnkd.in/gYwg2sTJ)
+
+---
+""")
+
+
 # --- API Key Input ---
 api_key = st.text_input("🔐 Enter your Google API Key", type="password")
 if not api_key:
@@ -109,8 +125,10 @@ Be descriptive and include:
 - **Subjects**, **actions**, **colors**, **style**, **mood**, **lighting**, **composition**
 
 **Examples**:
-- "A majestic dragon flying over snow-capped mountains, fantasy art style"
-- "A cozy coffee shop at sunset, watercolor painting, warm light"
+- "A majestic dragon flying over snow-capped mountains, fantasy art style" - without option
+- "A cozy coffee shop at sunset, watercolor painting, warm light" - without option
+- "A cozy coffee shop at sunset, warm light" - with option
+
 
 ---
 
