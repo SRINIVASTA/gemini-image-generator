@@ -205,3 +205,13 @@ st.markdown("""
 ### 💡 Prompt Writing Tips
 Be descriptive and include:
 - **Subjects & Actions**: What is happening in the scene?
+# --- Prompt Tips ---
+st.markdown("---")
+st.markdown("""
+### 💡 Prompt Writing Tips
+Be descriptive and include:
+- **Subjects & Actions**: What is happening in the scene?
+- **Atmosphere**: Lighting (e.g., *cinematic light*, *golden hour*), mood, and color palette.
+- **Composition**: Camera perspective (e.g., *macro closeup*, *aerial landscape photography*).
+""")
+
