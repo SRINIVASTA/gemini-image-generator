@@ -36,7 +36,8 @@ except Exception as e:
     st.stop()
 
 # --- Layout with columns ---
-col1, col2 = st.columns()
+# FIXED: Added explicit number of columns to prevent Streamlit TypeError
+col1, col2 = st.columns([3, 1])
 
 with col1:
     prompt = st.text_area("📝 Enter your image prompt here", height=150, placeholder="A high-tech cyberpunk city at sunset with neon reflections...")
@@ -88,7 +89,6 @@ if st.button("🚀 Generate Image", use_container_width=True):
                     if tier == "Free Tier (Generative)":
                         free_tier_prompt = f"Return an IMAGE part only showing exactly: {prompt.strip()}. {style_hint}. DO NOT return any text explanations."
                         
-                        # FIXED: Changed model to gemini-2.5-flash-image to avoid "text output only" error
                         response = client.models.generate_content(
                             model="gemini-2.5-flash-image",
                             contents=[free_tier_prompt],
