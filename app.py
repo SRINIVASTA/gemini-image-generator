@@ -40,14 +40,15 @@ except Exception as e:
     st.stop()
 
 # --- Layout with columns ---
-col1, col2 = st.columns()
+# FIXED: Re-added explicit layout weighting list to fix Streamlit TypeError
+col1, col2 = st.columns([3, 1])
 
 with col1:
     prompt = st.text_area("📝 Enter your image prompt here", height=150)
 
 with col2:
     with st.expander("🎨 Options"):
-        # Added a toggle between Free Tier and Premium Tier to avoid errors
+        # Select tier to bypass billing restriction on free keys
         tier = st.radio("Select API Account Tier", ["Free Tier", "Paid/Billing Enabled Tier"])
         
         style = st.selectbox(
@@ -86,7 +87,7 @@ if st.button("🚀 Generate Image"):
         with st.spinner("Generating image..."):
             try:
                 if tier == "Free Tier":
-                    # FIX FOR FREE USERS: Use multimodal content endpoint mapped to generate text/images natively
+                    # Free tier maps content to multimodal generation
                     response = client.models.generate_content(
                         model="gemini-2.5-flash",
                         contents=[full_prompt],
@@ -122,7 +123,7 @@ if st.button("🚀 Generate Image"):
                         st.error("❌ The free model did not return image data. Try a simpler prompt or enable billing.")
                 
                 else:
-                    # PAID TIER BLOCK: Uses high-definition production architecture
+                    # Paid tier routes directly to high-fidelity Imagen models
                     result = client.models.generate_images(
                         model="imagen-4.0-generate-001",
                         prompt=full_prompt,
