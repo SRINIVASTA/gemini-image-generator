@@ -207,5 +207,6 @@ st.markdown("""
 Be descriptive and include:
 - **Subjects & Actions**: What is happening in the scene?
 - **Atmosphere**: Lighting (e.g., *cinematic light*, *golden hour*), mood, and color palette.
-- **Composition**: Camera perspective (e.g., *macro closeup*, *aerial landscape photography*).
+- **Composition**: Camera perspective (e.g., *macro closeup*, *aerial landscape photography*.
+- **🚀 Ultra-Short Prompts**: Prompts (e.g., *Cyberpunk city street, neon lighting, cinematic*, "Cute fluffy orange cat, Pixar style").
 """)
