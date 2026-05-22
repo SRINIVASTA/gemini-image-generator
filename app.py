@@ -34,20 +34,22 @@ if not api_key:
 
 # --- Configure Client ---
 try:
-    # Official modern SDK instantiation syntax
     client = genai.Client(api_key=api_key)  
 except Exception as e:
     st.error(f"❌ Failed to authenticate with API key: {e}")
     st.stop()
 
 # --- Layout with columns ---
-col1, col2 = st.columns([3, 1])
+col1, col2 = st.columns()
 
 with col1:
     prompt = st.text_area("📝 Enter your image prompt here", height=150)
 
 with col2:
     with st.expander("🎨 Options"):
+        # Added a toggle between Free Tier and Premium Tier to avoid errors
+        tier = st.radio("Select API Account Tier", ["Free Tier", "Paid/Billing Enabled Tier"])
+        
         style = st.selectbox(
             "Choose Artistic Style",
             ["Any", "Photorealistic", "Pixel Art", "Vector Art", "3D Render", "Isometric",
@@ -74,7 +76,7 @@ sdk_aspect_ratio = aspect_ratio_map.get(aspect, "1:1")
 
 # --- Construct Final Prompt ---
 style_hint = f"in {style} style" if style != "Any" else ""
-full_prompt = f"{prompt.strip()}, {style_hint}".strip(", ")
+full_prompt = f"Generate an image of: {prompt.strip()}. {style_hint}".strip()
 
 # --- Generate Image ---
 if st.button("🚀 Generate Image"):
@@ -83,44 +85,78 @@ if st.button("🚀 Generate Image"):
     else:
         with st.spinner("Generating image..."):
             try:
-                # FIXED: Pointing directly to production model & image endpoint
-                result = client.models.generate_images(
-                    model="imagen-4.0-generate-001",
-                    prompt=full_prompt,
-                    config=types.GenerateImagesConfig(
-                        number_of_images=1,
-                        aspect_ratio=sdk_aspect_ratio,
-                        output_mime_type=f"image/{img_format.lower()}",
-                    )
-                )
-
-                found_image = False
-                # FIXED: Accessing specific payload binary bytes natively returned by Imagen 4
-                if result.generated_images:
-                    for gen_img in result.generated_images:
-                        image = Image.open(BytesIO(gen_img.image.image_bytes))
-                        
-                        # Note: 'use_container_width' is standard for modern Streamlit layout resizing
-                        st.image(image, caption="🖼 Generated Image", use_container_width=True)
-
-                        # Save image locally for user download
-                        img_bytes = BytesIO()
-                        file_format = "JPEG" if img_format.upper() == "JPG" else img_format.upper()
-                        image.save(img_bytes, format=file_format)
-                        img_bytes.seek(0)
-
-                        st.download_button(
-                            label="⬇️ Download Image",
-                            data=img_bytes,
-                            file_name=f"gemini_image.{img_format.lower()}",
-                            mime=f"image/{img_format.lower()}"
+                if tier == "Free Tier":
+                    # FIX FOR FREE USERS: Use multimodal content endpoint mapped to generate text/images natively
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=[full_prompt],
+                        config=types.GenerateContentConfig(
+                            response_modalities=["IMAGE"]
                         )
+                    )
+                    
+                    found_image = False
+                    if response.candidates and response.candidates[0].content.parts:
+                        for part in response.candidates[0].content.parts:
+                            if part.inline_data:
+                                image = Image.open(BytesIO(part.inline_data.data))
+                                st.image(image, caption="🖼 Generated Image (Free Tier)", use_container_width=True)
+                                
+                                # Prepare image bytes for download
+                                img_bytes = BytesIO()
+                                file_format = "JPEG" if img_format.upper() == "JPG" else img_format.upper()
+                                image.save(img_bytes, format=file_format)
+                                img_bytes.seek(0)
 
-                        st.success("✅ Image generated successfully!")
-                        found_image = True
+                                st.download_button(
+                                    label="⬇️ Download Image",
+                                    data=img_bytes,
+                                    file_name=f"gemini_image.{img_format.lower()}",
+                                    mime=f"image/{img_format.lower()}"
+                                )
+                                st.success("✅ Image generated successfully via Free Tier!")
+                                found_image = True
+                                break
 
-                if not found_image:
-                    st.error("❌ No image found. Try a simpler or clearer prompt.")
+                    if not found_image:
+                        st.error("❌ The free model did not return image data. Try a simpler prompt or enable billing.")
+                
+                else:
+                    # PAID TIER BLOCK: Uses high-definition production architecture
+                    result = client.models.generate_images(
+                        model="imagen-4.0-generate-001",
+                        prompt=full_prompt,
+                        config=types.GenerateImagesConfig(
+                            number_of_images=1,
+                            aspect_ratio=sdk_aspect_ratio,
+                            output_mime_type=f"image/{img_format.lower()}",
+                        )
+                    )
+
+                    found_image = False
+                    if result.generated_images:
+                        for gen_img in result.generated_images:
+                            image = Image.open(BytesIO(gen_img.image.image_bytes))
+                            st.image(image, caption="🖼 Generated Image (Premium Tier)", use_container_width=True)
+
+                            img_bytes = BytesIO()
+                            file_format = "JPEG" if img_format.upper() == "JPG" else img_format.upper()
+                            image.save(img_bytes, format=file_format)
+                            img_bytes.seek(0)
+
+                            st.download_button(
+                                label="⬇️ Download Image",
+                                data=img_bytes,
+                                file_name=f"gemini_image.{img_format.lower()}",
+                                mime=f"image/{img_format.lower()}"
+                            )
+
+                            st.success("✅ Premium Image generated successfully!")
+                            found_image = True
+
+                    if not found_image:
+                        st.error("❌ No image found. Try a simpler or clearer prompt.")
+                        
             except Exception as e:
                 st.error(f"❌ Error during image generation: {e}")
 
@@ -132,17 +168,9 @@ st.markdown("""
 Be descriptive and include:
 - **Subjects**, **actions**, **colors**, **style**, **mood**, **lighting**, **composition**
 
-**Examples**:
-- "A majestic dragon flying over snow-capped mountains, fantasy art style" - without option
-- "A cozy coffee shop at sunset, watercolor painting, warm light" - without option
-- "A cozy coffee shop at sunset, warm light" - with option
-
-
 ---
 
 **Style Options:** Pixel Art, 3D Render, Oil Painting, etc.  
 **Aspect Ratios:** Square, Portrait, Landscape  
 **Formats:** PNG or JPEG
-
-*These are just hints to the AI. Results may vary.*
 """)
