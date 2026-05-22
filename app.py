@@ -20,7 +20,7 @@ To generate images with Google Gemini AI, you'll need to provide your own API ke
 🔐 **Required API Key:**  
 `GOOGLE_API_KEY` → used to access Google Gemini AI
 
-👉 [Get your API key here](https://lnkd.in/gYwg2sTJ)
+👉 [Get your API key here](https://google.com)
 
 ---
 """)
@@ -34,10 +34,8 @@ if not api_key:
 
 # --- Configure Client ---
 try:
-    # The new genai package expects setting the env variable or alternative auth
-    # If your genai version supports configure, uncomment the next line:
-    # genai.configure(api_key=api_key)
-    client = genai.Client(api_key=api_key)  # Pass API key directly to Client if supported
+    # Use the official modern SDK client configuration
+    client = genai.Client(api_key=api_key)  
 except Exception as e:
     st.error(f"❌ Failed to authenticate with API key: {e}")
     st.stop()
@@ -65,10 +63,19 @@ with col2:
 
         img_format = st.selectbox("Choose Output Format", ["PNG", "JPEG"])
 
+# --- Map User Selections to SDK Parameters ---
+# Convert friendly aspect ratios to SDK supported strings
+aspect_ratio_map = {
+    "Any": "1:1",
+    "Square (1:1)": "1:1",
+    "Portrait (9:16)": "9:16",
+    "Landscape (16:9)": "16:9"
+}
+sdk_aspect_ratio = aspect_ratio_map.get(aspect, "1:1")
+
 # --- Construct Final Prompt ---
 style_hint = f"in {style} style" if style != "Any" else ""
-aspect_hint = f"aspect ratio {aspect}" if aspect != "Any" else ""
-full_prompt = f"{prompt.strip()}, {style_hint}, {aspect_hint}".strip(", ")
+full_prompt = f"{prompt.strip()}, {style_hint}".strip(", ")
 
 # --- Generate Image ---
 if st.button("🚀 Generate Image"):
@@ -77,27 +84,27 @@ if st.button("🚀 Generate Image"):
     else:
         with st.spinner("Generating image..."):
             try:
-                response = client.models.generate_content(
-                    model="gemini-2.0-flash-exp-image-generation",
-                    contents=[full_prompt],
-                    config=types.GenerateContentConfig(
-                        response_modalities=['TEXT', 'IMAGE']
+                # FIX: Use generate_images with an Imagen model
+                result = client.models.generate_images(
+                    model="imagen-3.0-generate-002",
+                    prompt=full_prompt,
+                    config=types.GenerateImagesConfig(
+                        number_of_images=1,
+                        aspect_ratio=sdk_aspect_ratio,
+                        output_mime_type=f"image/{img_format.lower()}",
                     )
                 )
 
                 found_image = False
-                for part in response.candidates[0].content.parts:
-                    if part.text:
-                        st.write(part.text)
-                    elif part.inline_data:
-                        image = Image.open(BytesIO(part.inline_data.data))
+                # Access the generated image bytes directly from the response
+                if result.generated_images:
+                    for gen_img in result.generated_images:
+                        image = Image.open(BytesIO(gen_img.image.image_bytes))
                         st.image(image, caption="🖼 Generated Image", use_container_width=True)
 
-                        # Save image for download
+                        # Prepare image bytes for download
                         img_bytes = BytesIO()
-                        file_format = img_format.upper()
-                        if file_format == "JPG":
-                            file_format = "JPEG"
+                        file_format = "JPEG" if img_format.upper() == "JPG" else img_format.upper()
                         image.save(img_bytes, format=file_format)
                         img_bytes.seek(0)
 
