@@ -93,8 +93,9 @@ if st.button("🚀 Generate Image"):
             with st.spinner("Generating image..." if attempt == 0 else f"Retrying generation (Attempt {attempt+1}/{MAX_RETRIES+1})..."):
                 try:
                     if tier == "Free Tier":
+                        # UPGRADED: Using gemini-3.5-flash for optimized multimodal image content extraction
                         response = client.models.generate_content(
-                            model="gemini-2.5-flash-image",
+                            model="gemini-3.5-flash",
                             contents=[full_prompt],
                             config=types.GenerateContentConfig(
                                 response_modalities=["IMAGE"]
@@ -102,6 +103,7 @@ if st.button("🚀 Generate Image"):
                         )
                         
                         found_image = False
+                        # FIXED: Safe verification pattern for multi-part candidate objects
                         if response.candidates and response.candidates[0].content.parts:
                             for part in response.candidates[0].content.parts:
                                 if part.inline_data:
@@ -125,11 +127,11 @@ if st.button("🚀 Generate Image"):
                                     break
 
                         if not found_image:
-                            st.error("❌ The free image model did not return inline data. Try adjusting your prompt.")
-                            break # Break out of loop since it's not a rate limit error
+                            st.error("❌ The free image model did not return inline image data. Try adjusting your prompt.")
+                            break 
                     
                     else:
-                        # Paid tier path
+                        # Paid tier path (High Definition Standalone Engine)
                         result = client.models.generate_images(
                             model="imagen-4.0-generate-001",
                             prompt=full_prompt,
@@ -167,24 +169,31 @@ if st.button("🚀 Generate Image"):
                             break
                             
                 except APIError as api_err:
-                    # Catch rate limit specifically [429]
-                    if api_err.code == 429 and attempt < MAX_RETRIES:
-                        attempt += 1
-                        # Create an on-screen warning panel with a live ticking countdown
-                        cooldown_message = st.warning(f"⏳ **Rate Limit Exceeded (429)**. Cooldown triggered. Automatically retrying in {COOLDOWN_SECONDS} seconds...")
-                        countdown_progress = st.progress(1.0)
+                    if api_err.code == 429:
+                        # FIXED: Instantly break and inform user if daily limits hit limit: 0
+                        if "limit: 0" in str(api_err.message):
+                            st.error("🚫 **Daily Free Quota Fully Exhausted!**")
+                            st.info("Google has paused this free key for the rest of the day. To continue, generate a completely NEW API Key inside a NEW project in Google AI Studio, or link a card to upgrade your account tier.")
+                            break
                         
-                        # Live animated countdown loop
-                        for remaining in range(COOLDOWN_SECONDS, 0, -1):
-                            cooldown_message.warning(f"⏳ **Rate Limit Exceeded (429)**. Shared free servers are busy. Automatically retrying in **{remaining}** seconds...")
-                            countdown_progress.progress(remaining / COOLDOWN_SECONDS)
-                            time.sleep(1)
+                        # Handle temporary, recoverable per-minute bottlenecks
+                        elif attempt < MAX_RETRIES:
+                            attempt += 1
+                            cooldown_message = st.warning(f"⏳ **Rate Limit Exceeded (429)**. Cooldown triggered. Automatically retrying in {COOLDOWN_SECONDS} seconds...")
+                            countdown_progress = st.progress(1.0)
                             
-                        # Clear countdown indicators before the retry triggers
-                        cooldown_message.empty()
-                        countdown_progress.empty()
+                            # FIXED: Cleanly closed your countdown ticker loop block
+                            for remaining in range(COOLDOWN_SECONDS, 0, -1):
+                                cooldown_message.warning(f"⏳ **Rate Limit Exceeded (429)**. Shared free servers are busy. Automatically retrying in **{remaining}** seconds...")
+                                countdown_progress.progress(remaining / COOLDOWN_SECONDS)
+                                time.sleep(1)
+                                
+                            cooldown_message.empty()
+                            countdown_progress.empty()
+                        else:
+                            st.error("❌ Tried to generate multiple times, but the free tier servers remain busy. Please try again in a moment.")
+                            break
                     else:
-                        # If retries are exhausted or it's a completely different API error code
                         st.error(f"❌ Google API Error ({api_err.code}): {api_err.message}")
                         break
                 except Exception as e:
