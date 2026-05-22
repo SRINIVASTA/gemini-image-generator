@@ -1,8 +1,8 @@
 import streamlit as st
-import time  # Added for handling rate-limit cooldowns
+import time  # For handling the automatic countdown delay
 from google import genai
 from google.genai import types
-from google.genai.errors import APIError  # Added for precise API error catching
+from google.genai.errors import APIError  # For catching exact 429 server errors
 from PIL import Image
 from io import BytesIO
 
@@ -83,25 +83,69 @@ if st.button("🚀 Generate Image"):
     if not prompt.strip():
         st.warning("⚠️ Please enter a prompt.")
     else:
-        with st.spinner("Generating image..."):
-            try:
-                if tier == "Free Tier":
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash-image",
-                        contents=[full_prompt],
-                        config=types.GenerateContentConfig(
-                            response_modalities=["IMAGE"]
+        # Configuration setup for the automatic retry mechanism
+        MAX_RETRIES = 2
+        COOLDOWN_SECONDS = 26
+        attempt = 0
+        success = False
+
+        while attempt <= MAX_RETRIES and not success:
+            with st.spinner("Generating image..." if attempt == 0 else f"Retrying generation (Attempt {attempt+1}/{MAX_RETRIES+1})..."):
+                try:
+                    if tier == "Free Tier":
+                        response = client.models.generate_content(
+                            model="gemini-2.5-flash-image",
+                            contents=[full_prompt],
+                            config=types.GenerateContentConfig(
+                                response_modalities=["IMAGE"]
+                            )
                         )
-                    )
+                        
+                        found_image = False
+                        if response.candidates and response.candidates[0].content.parts:
+                            for part in response.candidates[0].content.parts:
+                                if part.inline_data:
+                                    image = Image.open(BytesIO(part.inline_data.data))
+                                    st.image(image, caption="🖼 Generated Image (Free Tier)", use_container_width=True)
+                                    
+                                    img_bytes = BytesIO()
+                                    file_format = "JPEG" if img_format.upper() == "JPG" else img_format.upper()
+                                    image.save(img_bytes, format=file_format)
+                                    img_bytes.seek(0)
+
+                                    st.download_button(
+                                        label="⬇️ Download Image",
+                                        data=img_bytes,
+                                        file_name=f"gemini_image.{img_format.lower()}",
+                                        mime=f"image/{img_format.lower()}"
+                                    )
+                                    st.success("✅ Image generated successfully via Free Tier!")
+                                    found_image = True
+                                    success = True
+                                    break
+
+                        if not found_image:
+                            st.error("❌ The free image model did not return inline data. Try adjusting your prompt.")
+                            break # Break out of loop since it's not a rate limit error
                     
-                    found_image = False
-                    if response.candidates and response.candidates[0].content.parts:
-                        for part in response.candidates[0].content.parts:
-                            if part.inline_data:
-                                image = Image.open(BytesIO(part.inline_data.data))
-                                st.image(image, caption="🖼 Generated Image (Free Tier)", use_container_width=True)
-                                
-                                # Prepare image bytes for download
+                    else:
+                        # Paid tier path
+                        result = client.models.generate_images(
+                            model="imagen-4.0-generate-001",
+                            prompt=full_prompt,
+                            config=types.GenerateImagesConfig(
+                                number_of_images=1,
+                                aspect_ratio=sdk_aspect_ratio,
+                                output_mime_type=f"image/{img_format.lower()}",
+                            )
+                        )
+
+                        found_image = False
+                        if result.generated_images:
+                            for gen_img in result.generated_images:
+                                image = Image.open(BytesIO(gen_img.image.image_bytes))
+                                st.image(image, caption="🖼 Generated Image (Premium Tier)", use_container_width=True)
+
                                 img_bytes = BytesIO()
                                 file_format = "JPEG" if img_format.upper() == "JPG" else img_format.upper()
                                 image.save(img_bytes, format=file_format)
@@ -113,57 +157,39 @@ if st.button("🚀 Generate Image"):
                                     file_name=f"gemini_image.{img_format.lower()}",
                                     mime=f"image/{img_format.lower()}"
                                 )
-                                st.success("✅ Image generated successfully via Free Tier!")
+
+                                st.success("✅ Premium Image generated successfully!")
                                 found_image = True
-                                break
+                                success = True
 
-                    if not found_image:
-                        st.error("❌ The free image model did not return inline data. Try adjusting your prompt.")
-                
-                else:
-                    result = client.models.generate_images(
-                        model="imagen-4.0-generate-001",
-                        prompt=full_prompt,
-                        config=types.GenerateImagesConfig(
-                            number_of_images=1,
-                            aspect_ratio=sdk_aspect_ratio,
-                            output_mime_type=f"image/{img_format.lower()}",
-                        )
-                    )
-
-                    found_image = False
-                    if result.generated_images:
-                        for gen_img in result.generated_images:
-                            image = Image.open(BytesIO(gen_img.image.image_bytes))
-                            st.image(image, caption="🖼 Generated Image (Premium Tier)", use_container_width=True)
-
-                            img_bytes = BytesIO()
-                            file_format = "JPEG" if img_format.upper() == "JPG" else img_format.upper()
-                            image.save(img_bytes, format=file_format)
-                            img_bytes.seek(0)
-
-                            st.download_button(
-                                label="⬇️ Download Image",
-                                data=img_bytes,
-                                file_name=f"gemini_image.{img_format.lower()}",
-                                mime=f"image/{img_format.lower()}"
-                            )
-
-                            st.success("✅ Premium Image generated successfully!")
-                            found_image = True
-
-                    if not found_image:
-                        st.error("❌ No image found. Try a simpler or clearer prompt.")
+                        if not found_image:
+                            st.error("❌ No image found. Try a simpler or clearer prompt.")
+                            break
+                            
+                except APIError as api_err:
+                    # Catch rate limit specifically [429]
+                    if api_err.code == 429 and attempt < MAX_RETRIES:
+                        attempt += 1
+                        # Create an on-screen warning panel with a live ticking countdown
+                        cooldown_message = st.warning(f"⏳ **Rate Limit Exceeded (429)**. Cooldown triggered. Automatically retrying in {COOLDOWN_SECONDS} seconds...")
+                        countdown_progress = st.progress(1.0)
                         
-            # FIXED: Target Google API specific errors explicitly
-            except APIError as api_err:
-                if api_err.code == 429:
-                    st.error("⏳ **Rate Limit Exceeded (429 RESOURCE_EXHAUSTED)**")
-                    st.info("The free tier limits how many images you can make per minute. Please wait 25 seconds before clicking generate again, or switch your account tier to Paid/Billing Enabled.")
-                else:
-                    st.error(f"❌ Google API Error ({api_err.code}): {api_err.message}")
-            except Exception as e:
-                st.error(f"❌ Unexpected Error: {e}")
+                        # Live animated countdown loop
+                        for remaining in range(COOLDOWN_SECONDS, 0, -1):
+                            cooldown_message.warning(f"⏳ **Rate Limit Exceeded (429)**. Shared free servers are busy. Automatically retrying in **{remaining}** seconds...")
+                            countdown_progress.progress(remaining / COOLDOWN_SECONDS)
+                            time.sleep(1)
+                            
+                        # Clear countdown indicators before the retry triggers
+                        cooldown_message.empty()
+                        countdown_progress.empty()
+                    else:
+                        # If retries are exhausted or it's a completely different API error code
+                        st.error(f"❌ Google API Error ({api_err.code}): {api_err.message}")
+                        break
+                except Exception as e:
+                    st.error(f"❌ Unexpected Error: {e}")
+                    break
 
 # --- Prompt Tips ---
 st.markdown("---")
