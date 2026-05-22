@@ -1,6 +1,8 @@
 import streamlit as st
+import time  # Added for handling rate-limit cooldowns
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError  # Added for precise API error catching
 from PIL import Image
 from io import BytesIO
 
@@ -25,7 +27,6 @@ To generate images with Google Gemini AI, you'll need to provide your own API ke
 ---
 """)
 
-
 # --- API Key Input ---
 api_key = st.text_input("🔐 Enter your Google API Key", type="password")
 if not api_key:
@@ -47,7 +48,6 @@ with col1:
 
 with col2:
     with st.expander("🎨 Options"):
-        # Select tier to route to correct backend architecture
         tier = st.radio("Select API Account Tier", ["Free Tier", "Paid/Billing Enabled Tier"])
         
         style = st.selectbox(
@@ -86,7 +86,6 @@ if st.button("🚀 Generate Image"):
         with st.spinner("Generating image..."):
             try:
                 if tier == "Free Tier":
-                    # FIXED: Changed from 'gemini-2.5-flash' to 'gemini-2.5-flash-image' 
                     response = client.models.generate_content(
                         model="gemini-2.5-flash-image",
                         contents=[full_prompt],
@@ -122,7 +121,6 @@ if st.button("🚀 Generate Image"):
                         st.error("❌ The free image model did not return inline data. Try adjusting your prompt.")
                 
                 else:
-                    # Paid Tier implementation utilizing professional standalone endpoints
                     result = client.models.generate_images(
                         model="imagen-4.0-generate-001",
                         prompt=full_prompt,
@@ -157,8 +155,15 @@ if st.button("🚀 Generate Image"):
                     if not found_image:
                         st.error("❌ No image found. Try a simpler or clearer prompt.")
                         
+            # FIXED: Target Google API specific errors explicitly
+            except APIError as api_err:
+                if api_err.code == 429:
+                    st.error("⏳ **Rate Limit Exceeded (429 RESOURCE_EXHAUSTED)**")
+                    st.info("The free tier limits how many images you can make per minute. Please wait 25 seconds before clicking generate again, or switch your account tier to Paid/Billing Enabled.")
+                else:
+                    st.error(f"❌ Google API Error ({api_err.code}): {api_err.message}")
             except Exception as e:
-                st.error(f"❌ Error during image generation: {e}")
+                st.error(f"❌ Unexpected Error: {e}")
 
 # --- Prompt Tips ---
 st.markdown("---")
