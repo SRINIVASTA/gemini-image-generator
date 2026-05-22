@@ -34,7 +34,7 @@ if not api_key:
 
 # --- Configure Client ---
 try:
-    # Use the official modern SDK client configuration
+    # Official modern SDK instantiation syntax
     client = genai.Client(api_key=api_key)  
 except Exception as e:
     st.error(f"❌ Failed to authenticate with API key: {e}")
@@ -64,7 +64,6 @@ with col2:
         img_format = st.selectbox("Choose Output Format", ["PNG", "JPEG"])
 
 # --- Map User Selections to SDK Parameters ---
-# Convert friendly aspect ratios to SDK supported strings
 aspect_ratio_map = {
     "Any": "1:1",
     "Square (1:1)": "1:1",
@@ -84,9 +83,9 @@ if st.button("🚀 Generate Image"):
     else:
         with st.spinner("Generating image..."):
             try:
-                # FIX: Use generate_images with an Imagen model
+                # FIXED: Pointing directly to production model & image endpoint
                 result = client.models.generate_images(
-                    model="imagen-3.0-generate-002",
+                    model="imagen-4.0-generate-001",
                     prompt=full_prompt,
                     config=types.GenerateImagesConfig(
                         number_of_images=1,
@@ -96,13 +95,15 @@ if st.button("🚀 Generate Image"):
                 )
 
                 found_image = False
-                # Access the generated image bytes directly from the response
+                # FIXED: Accessing specific payload binary bytes natively returned by Imagen 4
                 if result.generated_images:
                     for gen_img in result.generated_images:
                         image = Image.open(BytesIO(gen_img.image.image_bytes))
+                        
+                        # Note: 'use_container_width' is standard for modern Streamlit layout resizing
                         st.image(image, caption="🖼 Generated Image", use_container_width=True)
 
-                        # Prepare image bytes for download
+                        # Save image locally for user download
                         img_bytes = BytesIO()
                         file_format = "JPEG" if img_format.upper() == "JPG" else img_format.upper()
                         image.save(img_bytes, format=file_format)
